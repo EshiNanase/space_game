@@ -3,6 +3,7 @@ import asyncio
 import curses
 import random
 from itertools import cycle
+from controls import read_controls
 
 
 SPACE_KEY_CODE = 32
@@ -70,31 +71,6 @@ async def fire(canvas, start_row, start_column, rows_speed=-0.3, columns_speed=0
         canvas.addstr(round(row), round(column), ' ')
         row += rows_speed
         column += columns_speed
-
-
-def read_controls(canvas):
-
-    rows_direction = columns_direction = 0
-
-    while True:
-        pressed_key_code = canvas.getch()
-
-        if pressed_key_code == -1:
-            break
-
-        if pressed_key_code == UP_KEY_CODE:
-            rows_direction = -3
-
-        if pressed_key_code == DOWN_KEY_CODE:
-            rows_direction = 3
-
-        if pressed_key_code == RIGHT_KEY_CODE:
-            columns_direction = 3
-
-        if pressed_key_code == LEFT_KEY_CODE:
-            columns_direction = -3
-
-    return rows_direction, columns_direction
 
 
 def draw_frame(canvas, start_row, start_column, text, negative=False):
