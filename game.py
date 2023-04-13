@@ -2,64 +2,96 @@ import random
 import time
 import curses
 import asyncio
+from itertools import cycle
+from functools import partial
+from controls import read_controls
 
 
-def draw(canvas):
+def draw(canvas, rocket_frame_1, rocket_frame_2):
+
     canvas.border()
+    canvas.nodelay(True)
     curses.curs_set(False)
-    y, x = curses.window.getmaxyx(canvas)
+    y, x = canvas.getmaxyx()
+
     symbols = ['+', '*', '.', ':']
-
-    coroutines = [blink(canvas, row=random.randint(5, y-5), column=random.randint(5, x-5), symbol=random.choice(symbols)) for index in range(5)]
-    bullet = fire(canvas, 0, 0)
-
-    for coroutine in coroutines:
-        coroutine.send(None)
-        canvas.refresh()
+    frames = cycle(
+            [
+                animate_spaceship(canvas, start_row=15, start_column=60, text=rocket_frame_1),
+                animate_spaceship(canvas, start_row=15, start_column=60, text=rocket_frame_1, negative=True),
+                animate_spaceship(canvas, start_row=15, start_column=60, text=rocket_frame_2),
+                animate_spaceship(canvas, start_row=15, start_column=60, text=rocket_frame_2, negative=True),
+            ]
+    )
+    blinks = cycle([blink(canvas, row=random.randint(5, y-1), column=random.randint(5, x-1), symbol=random.choice(symbols)) for index in range(100)])
 
     while True:
-        for coroutine in coroutines.copy():
-            coroutine.send(None)
-            canvas.refresh()
-        time.sleep(2)
+        next(blinks).send(None)
+        canvas.refresh()
+        next(blinks).send(None)
+        canvas.refresh()
+        next(frames).send(None)
+        canvas.refresh()
 
-        for coroutine in coroutines.copy():
-            coroutine.send(None)
-            canvas.refresh()
-        time.sleep(0.3)
 
-        for coroutine in coroutines.copy():
-            coroutine.send(None)
-            canvas.refresh()
-        time.sleep(0.5)
+async def animate_spaceship(canvas, start_row, start_column, text, negative=False):
 
-        for coroutine in coroutines.copy():
-            coroutine.send(None)
-            canvas.refresh()
-        time.sleep(0.3)
+    while True:
+
+        time.sleep(0.00001)
+
+        rows_number, columns_number = canvas.getmaxyx()
+        rows_direction, columns_direction = read_controls(canvas)
+
+        for row, line in enumerate(text.splitlines(), round(start_row)):
+            if row < 0:
+                continue
+
+            if row >= rows_number:
+                break
+
+            for column, symbol in enumerate(line, round(start_column)):
+                if column < 0:
+                    continue
+
+                if column >= columns_number:
+                    break
+
+                if symbol == ' ':
+                    continue
+
+                if row == rows_number - 1 and column == columns_number - 1:
+                    continue
+
+                symbol = symbol if not negative else ' '
+                canvas.addch(row + rows_direction, column + columns_direction, symbol)
+
+        start_row += rows_direction
+        start_column += columns_direction
+        await asyncio.sleep(0)
 
 
 async def blink(canvas, row, column, symbol='*'):
 
     while True:
+        time.sleep(0.00001)
         canvas.addstr(row, column, symbol, curses.A_DIM)
-        time.sleep(random.uniform(0.1, 0.5))
         await asyncio.sleep(0)
 
+        time.sleep(0.00001)
         canvas.addstr(row, column, symbol)
-        time.sleep(random.uniform(0.1, 0.5))
         await asyncio.sleep(0)
 
+        time.sleep(0.00001)
         canvas.addstr(row, column, symbol, curses.A_BOLD)
-        time.sleep(random.uniform(0.1, 0.5))
         await asyncio.sleep(0)
 
+        time.sleep(0.00001)
         canvas.addstr(row, column, symbol)
-        time.sleep(random.uniform(0.1, 0.5))
         await asyncio.sleep(0)
 
 
-async def fire(canvas, start_row, start_column, rows_speed=-0.3, columns_speed=0):
+async def fire(canvas, start_row, start_column, rows_speed=0.3, columns_speed=0):
 
     row, column = start_row, start_column
 
@@ -89,8 +121,16 @@ async def fire(canvas, start_row, start_column, rows_speed=-0.3, columns_speed=0
 
 
 def main() -> None:
+
+    with open('animations/rocket_frame_1.txt', 'r') as file:
+        rocket_frame_1 = file.read()
+    with open('animations/rocket_frame_2.txt', 'r') as file:
+        rocket_frame_2 = file.read()
+
+    draw_art = partial(draw, rocket_frame_1=rocket_frame_1, rocket_frame_2=rocket_frame_2)
+
     curses.update_lines_cols()
-    curses.wrapper(draw)
+    curses.wrapper(draw_art)
 
 
 if __name__ == '__main__':
