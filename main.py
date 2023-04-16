@@ -6,7 +6,9 @@ from itertools import cycle
 from controls import read_controls
 
 TIC = 0.1
+OFFSET_TICS = 5
 SYMBOLS = ['+', '*', '.', ':']
+COROUTINES = []
 
 
 def fetch_spaceship_frames():
@@ -19,19 +21,19 @@ def fetch_spaceship_frames():
 
 async def blink(canvas, coord, symbol='*'):
     row, column = coord
-    for _ in range(0, random.randint(1, 20)):
+    for _ in range(OFFSET_TICS):
         await asyncio.sleep(0)
     while True:
-        for _ in range(0, 20):
+        for _ in range(20):
             canvas.addstr(row, column, symbol, curses.A_DIM)
             await asyncio.sleep(0)
-        for _ in range(0, 3):
+        for _ in range(3):
             canvas.addstr(row, column, symbol)
             await asyncio.sleep(0)
-        for _ in range(0, 5):
+        for _ in range(5):
             canvas.addstr(row, column, symbol, curses.A_BOLD)
             await asyncio.sleep(0)
-        for _ in range(0, 3):
+        for _ in range(3):
             canvas.addstr(row, column, symbol)
             await asyncio.sleep(0)
 
@@ -39,13 +41,13 @@ async def blink(canvas, coord, symbol='*'):
 async def fire(canvas, start_row, start_column, rows_speed=-0.3, columns_speed=0):
 
     row, column = start_row, start_column
-    for _ in range(0, 3):
+    for _ in range(3):
         canvas.addstr(round(row), round(column), '*')
         await asyncio.sleep(0)
-    for _ in range(0, 3):
+    for _ in range(3):
         canvas.addstr(round(row), round(column), 'O')
         await asyncio.sleep(0)
-    for _ in range(0, 2):
+    for _ in range(2):
         canvas.addstr(round(row), round(column), ' ')
         await asyncio.sleep(0)
 
@@ -108,20 +110,30 @@ def gen_frame(frames):
         yield frames[i]
 
 
+def gen_random_coordinates(value):
+    return random.randint(1, value - 1)
+
+
+def gen_random_symbol():
+    return random.choice(SYMBOLS)
+
+
 def fetch_next_coords(current_row, current_column, delta_row, delta_column, max_coords, frame_size):
     frame_rows, frame_columns = frame_size
     max_row, max_column = max_coords
-    next_row = current_row + delta_row
-    next_column = current_column + delta_column
-    if next_row < 1:
-        next_row = 1
-    if next_row + frame_rows > max_row:
-        next_row = max_row - frame_rows - 1
-    if next_column < 1:
-        next_column = 1
-    if next_column + frame_columns > max_column:
-        next_column = max_column - frame_columns -1
+    next_row = min(max(1, current_row + delta_row), min(current_row + delta_row, max_row - frame_rows - 1))
+    next_column = min(max(1, current_column + delta_column), min(current_column + delta_column, max_column - frame_columns - 1))
     return next_row, next_column
+
+
+def animate_spaceship(canvas, current_row, current_column, delta_row, delta_column, max_coords, frame, negative=False):
+    if negative:
+        draw_frame(canvas, current_row, current_column, frame, negative=True)
+    else:
+        frame_size = get_frame_size(frame)
+        current_row, current_column = fetch_next_coords(current_row, current_column, delta_row, delta_column, max_coords, frame_size)
+        draw_frame(canvas, current_row, current_column, frame)
+        return current_row, current_column
 
 
 def draw(canvas):
@@ -133,31 +145,25 @@ def draw(canvas):
 
     y, x = canvas.getmaxyx()
 
-    current_row, current_column = int(y/2), int(x/2)
-    coroutines = [blink(canvas, coord=(random.randint(1, y-1), random.randint(1, x-1)), symbol=random.choice(SYMBOLS)) for _ in range(1, 450)]
+    current_row, current_column = int(y/2-1), int(x/2-1)
+    COROUTINES.extend([blink(canvas, coord=(gen_random_coordinates(y), gen_random_coordinates(x)), symbol=gen_random_symbol()) for _ in range(1, 450)])
 
     while True:
-        for coroutine in coroutines.copy():
+        for coroutine in COROUTINES.copy():
             try:
                 coroutine.send(None)
             except StopIteration:
-                coroutines.remove(coroutine)
+                COROUTINES.remove(coroutine)
 
-        current_frame = next(frame)
-        delta_row, delta_column = read_controls(canvas)
-        current_row, current_column = fetch_next_coords(
-                current_row,
-                current_column,
-                delta_row,
-                delta_column,
-                window.getmaxyx(),
-                get_frame_size(current_frame)
-        )
-        draw_frame(canvas, current_row, current_column, current_frame)
+        delta_row, delta_column, fire_frame = read_controls(canvas)
+        current_row, current_column = animate_spaceship(canvas, current_row, current_column, delta_row, delta_column, window.getmaxyx(), next(frame))
+        if fire_frame:
+            for _ in range(1, 4):
+                COROUTINES.append(fire(canvas, current_row-1, current_column+_))
 
         canvas.border()
         canvas.refresh()
-        draw_frame(canvas, current_row, current_column, current_frame, negative=True)
+        animate_spaceship(canvas, current_row, current_column, delta_row, delta_column, window.getmaxyx(), next(frame), negative=True)
         time.sleep(TIC)
 
 
